@@ -17,26 +17,56 @@ export interface RunAttendanceResult {
   summary: string
 }
 
+interface AccountRunSummary {
+  id: string
+  name: string
+  success: boolean
+  appSignin?: {
+    exp: number
+    goldCoin: number
+  }
+  gameSignins: Array<{
+    gameId: string
+    roleName: string
+    days?: number
+    reward?: {
+      name: string
+      num: number
+    }
+    success: boolean
+  }>
+  error?: string
+}
+
 export async function runAttendance(deps: RunnerDependencies): Promise<RunAttendanceResult> {
   const accounts = parseAccountsSecret(deps.accountsSecret)
   const api = deps.api ?? new TaygedoApi()
   const updatedAccounts: TaygedoAccount[] = []
   let refreshedCount = 0
   const failedAccounts: string[] = []
+  const accountSummaries: AccountRunSummary[] = []
 
   for (const account of accounts) {
     try {
-      const updatedAccount = await withRetries(async () => {
+      const accountRun = await withRetries(async () => {
         const refreshed = await api.refreshToken(account.refreshToken, account.deviceId)
         const gameRoles = await getAllGameRoles(api, refreshed.accessToken, account.uid, account.deviceId)
         const firstRole = gameRoles[0]
         const roleId = firstRole?.roleId ?? account.roleId
 
-        await api.appSignin(refreshed.accessToken, account.uid, account.deviceId)
+        const appSignin = await api.appSignin(refreshed.accessToken, account.uid, account.deviceId)
+        const gameSignins: AccountRunSummary['gameSignins'] = []
         for (const role of gameRoles) {
-          await api.getSigninState(refreshed.accessToken, role.gameId)
-          await api.getSigninRewards(refreshed.accessToken, role.gameId)
+          const signinState = await api.getSigninState(refreshed.accessToken, role.gameId)
+          const signinRewards = await api.getSigninRewards(refreshed.accessToken, role.gameId)
           await api.gameSignin(refreshed.accessToken, role.roleId, role.gameId)
+          gameSignins.push({
+            gameId: role.gameId,
+            roleName: role.roleName ?? role.roleId,
+            days: signinState.days,
+            reward: signinRewards[signinState.days - 1],
+            success: true,
+          })
         }
 
         const updated: TaygedoAccount = {
@@ -49,15 +79,32 @@ export async function runAttendance(deps: RunnerDependencies): Promise<RunAttend
         if (firstRole?.roleName ?? account.roleName) {
           updated.roleName = firstRole?.roleName ?? account.roleName
         }
-        return updated
+        return {
+          updatedAccount: updated,
+          summary: {
+            id: account.id,
+            name: account.name,
+            success: true,
+            appSignin,
+            gameSignins,
+          } satisfies AccountRunSummary,
+        }
       }, deps.maxRetries ?? 3)
 
       refreshedCount++
-      updatedAccounts.push(updatedAccount)
+      updatedAccounts.push(accountRun.updatedAccount)
+      accountSummaries.push(accountRun.summary)
     }
-    catch {
+    catch (error) {
       updatedAccounts.push({ ...account })
       failedAccounts.push(account.id)
+      accountSummaries.push({
+        id: account.id,
+        name: account.name,
+        success: false,
+        gameSignins: [],
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -65,17 +112,20 @@ export async function runAttendance(deps: RunnerDependencies): Promise<RunAttend
     await deps.secretWriter(JSON.stringify(updatedAccounts, null, 2))
   }
 
+  const summary = buildSummary(accountSummaries)
+  console.log(summary)
+
   if (deps.notificationUrls?.length) {
     await sendNotification({
       urls: deps.notificationUrls,
       title: '塔吉多每日签到',
-      content: buildSummary(updatedAccounts, failedAccounts),
+      content: summary,
     })
   }
 
   return {
     updatedAccounts,
-    summary: buildSummary(updatedAccounts, failedAccounts),
+    summary,
   }
 }
 
@@ -106,9 +156,30 @@ async function getAllGameRoles(
   return roles
 }
 
-function buildSummary(updatedAccounts: TaygedoAccount[], failedAccounts: string[]): string {
-  return JSON.stringify({
-    total: updatedAccounts.length,
-    failedAccounts,
-  }, null, 2)
+function buildSummary(accounts: AccountRunSummary[]): string {
+  const successCount = accounts.filter(account => account.success).length
+  const failedCount = accounts.length - successCount
+  const lines = [
+    '塔吉多每日签到结果',
+    `总账号：${accounts.length}，成功：${successCount}，失败：${failedCount}`,
+    '',
+  ]
+
+  for (const account of accounts) {
+    lines.push(`${account.name}（${account.id}）：${account.success ? '成功' : '失败'}`)
+    if (account.appSignin) {
+      lines.push(`- APP 签到：获得 ${account.appSignin.goldCoin} 金币，${account.appSignin.exp} 经验`)
+    }
+    for (const gameSignin of account.gameSignins) {
+      const reward = gameSignin.reward ? `，奖励 ${gameSignin.reward.name} x${gameSignin.reward.num}` : ''
+      const days = gameSignin.days === undefined ? '' : `，本月第 ${gameSignin.days} 天`
+      lines.push(`- 游戏 ${gameSignin.gameId} / ${gameSignin.roleName}：签到成功${days}${reward}`)
+    }
+    if (account.error) {
+      lines.push(`- 失败原因：${account.error}`)
+    }
+    lines.push('')
+  }
+
+  return lines.join('\n').trim()
 }

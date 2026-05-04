@@ -1,4 +1,4 @@
-name: attendance
+name: 塔吉多签到
 
 on:
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run attendance
+      - name: 运行签到
         env:
           TAYGEDO_ACCOUNTS: ${{ secrets.TAYGEDO_ACCOUNTS }}
           TAYGEDO_NOTIFICATION_URLS: ${{ secrets.TAYGEDO_NOTIFICATION_URLS }}
@@ -34,7 +34,7 @@ jobs:
           TAYGEDO_UPDATED_ACCOUNTS_PATH: updated-accounts.json
         run: pnpm action
 
-      - name: Update TAYGEDO_ACCOUNTS secret
+      - name: 更新账号 Secret
         if: hashFiles('updated-accounts.json') != ''
         env:
           GH_TOKEN: ${{ secrets.GH_SECRET_UPDATE_TOKEN }}

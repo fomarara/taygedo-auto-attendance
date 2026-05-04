@@ -1,26 +1,26 @@
-name: login
+name: 塔吉多登录
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'send-code or login'
+        description: '发验证码或登录'
         required: true
         default: 'send-code'
       account_id:
-        description: 'Account id for login mode'
+        description: '登录时使用的账号标识'
         required: false
       account_name:
-        description: 'Account display name for login mode'
+        description: '登录时显示的账号名称'
         required: false
       phone:
-        description: 'Phone number'
+        description: '手机号'
         required: true
       captcha:
-        description: 'SMS captcha for login mode'
+        description: '短信验证码'
         required: false
       device_id:
-        description: 'Reuse this device id between send-code and login'
+        description: '两步登录共用的 deviceId'
         required: false
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Send captcha
+      - name: 发送验证码
         if: inputs.mode == 'send-code'
         env:
           TAYGEDO_LOGIN_MODE: send-code
@@ -53,7 +53,7 @@ jobs:
           TAYGEDO_LOGIN_DEVICE_ID_PATH: device-id.txt
         run: pnpm tsx src/login-action.ts
 
-      - name: Login and write accounts
+      - name: 登录并写回账号
         if: inputs.mode == 'login'
         env:
           TAYGEDO_LOGIN_MODE: login
@@ -66,7 +66,7 @@ jobs:
           TAYGEDO_UPDATED_ACCOUNTS_PATH: updated-accounts.json
         run: pnpm tsx src/login-action.ts
 
-      - name: Update TAYGEDO_ACCOUNTS secret
+      - name: 更新账号 Secret
         if: inputs.mode == 'login' && hashFiles('updated-accounts.json') != ''
         env:
           GH_TOKEN: ${{ secrets.GH_SECRET_UPDATE_TOKEN }}
