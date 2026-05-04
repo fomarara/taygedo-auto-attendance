@@ -10,7 +10,7 @@ describe('runAction', () => {
     const outputPath = join(dir, 'updated-accounts.json')
     const api = {
       refreshToken: vi.fn().mockResolvedValue({ accessToken: 'access-main', refreshToken: 'new-main' }),
-      getBindRole: vi.fn().mockResolvedValue({ roleId: 'role-1', roleName: '角色一' }),
+      getGameRoles: vi.fn().mockResolvedValue({ roles: [{ roleId: 'role-1', roleName: '角色一' }] }),
       appSignin: vi.fn().mockResolvedValue({ exp: 10, goldCoin: 20 }),
       getSigninState: vi.fn().mockResolvedValue({ days: 1 }),
       getSigninRewards: vi.fn().mockResolvedValue([{ name: '奖励一', num: 1 }]),

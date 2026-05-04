@@ -2,10 +2,11 @@ import { parseAccountsSecret, type TaygedoAccount } from './config/accounts.js'
 import { TaygedoApi } from './taygedo/api.js'
 import { sendNotification } from './notify.js'
 import { withRetries } from './utils/retry.js'
+import { TAYGEDO_GAME_IDS } from './taygedo/games.js'
 
 export interface RunnerDependencies {
   accountsSecret: string
-  api?: Pick<TaygedoApi, 'refreshToken' | 'getBindRole' | 'appSignin' | 'getSigninState' | 'getSigninRewards' | 'gameSignin'>
+  api?: Pick<TaygedoApi, 'refreshToken' | 'getGameRoles' | 'appSignin' | 'getSigninState' | 'getSigninRewards' | 'gameSignin'>
   notificationUrls?: string[]
   maxRetries?: number
   secretWriter?: (payload: string) => Promise<void>
@@ -27,24 +28,26 @@ export async function runAttendance(deps: RunnerDependencies): Promise<RunAttend
     try {
       const updatedAccount = await withRetries(async () => {
         const refreshed = await api.refreshToken(account.refreshToken, account.deviceId)
-        const role = await api.getBindRole(refreshed.accessToken, account.uid)
-        const roleId = role.roleId ?? account.roleId
-        if (!roleId) {
-          throw new Error('No bound role found')
-        }
+        const gameRoles = await getAllGameRoles(api, refreshed.accessToken, account.uid, account.deviceId)
+        const firstRole = gameRoles[0]
+        const roleId = firstRole?.roleId ?? account.roleId
 
         await api.appSignin(refreshed.accessToken, account.uid, account.deviceId)
-        await api.getSigninState(refreshed.accessToken)
-        await api.getSigninRewards(refreshed.accessToken)
-        await api.gameSignin(refreshed.accessToken, roleId)
+        for (const role of gameRoles) {
+          await api.getSigninState(refreshed.accessToken, role.gameId)
+          await api.getSigninRewards(refreshed.accessToken, role.gameId)
+          await api.gameSignin(refreshed.accessToken, role.roleId, role.gameId)
+        }
 
         const updated: TaygedoAccount = {
           ...account,
           refreshToken: refreshed.refreshToken,
-          roleId,
         }
-        if (role.roleName ?? account.roleName) {
-          updated.roleName = role.roleName ?? account.roleName
+        if (roleId) {
+          updated.roleId = roleId
+        }
+        if (firstRole?.roleName ?? account.roleName) {
+          updated.roleName = firstRole?.roleName ?? account.roleName
         }
         return updated
       }, deps.maxRetries ?? 3)
@@ -74,6 +77,33 @@ export async function runAttendance(deps: RunnerDependencies): Promise<RunAttend
     updatedAccounts,
     summary: buildSummary(updatedAccounts, failedAccounts),
   }
+}
+
+async function getAllGameRoles(
+  api: Pick<TaygedoApi, 'getGameRoles'>,
+  accessToken: string,
+  uid: string,
+  deviceId: string,
+): Promise<Array<{ gameId: string, roleId: string, roleName?: string }>> {
+  const roles: Array<{ gameId: string, roleId: string, roleName?: string }> = []
+  const seenRoleIds = new Set<string>()
+
+  for (const gameId of TAYGEDO_GAME_IDS) {
+    const gameRoleList = await api.getGameRoles(accessToken, uid, deviceId, gameId)
+    for (const role of gameRoleList.roles) {
+      if (!role.roleId || seenRoleIds.has(role.roleId)) {
+        continue
+      }
+      seenRoleIds.add(role.roleId)
+      roles.push({
+        gameId,
+        roleId: role.roleId,
+        roleName: role.roleName,
+      })
+    }
+  }
+
+  return roles
 }
 
 function buildSummary(updatedAccounts: TaygedoAccount[], failedAccounts: string[]): string {

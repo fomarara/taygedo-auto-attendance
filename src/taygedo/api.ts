@@ -30,6 +30,10 @@ export interface BindRoleResponse {
   roleName?: string
 }
 
+export interface GameRolesResponse {
+  roles: Array<{ roleId: string, roleName?: string }>
+}
+
 export class TaygedoApi {
   private readonly fetchImpl: typeof fetch
 
@@ -200,8 +204,8 @@ export class TaygedoApi {
     }
   }
 
-  async getBindRole(accessToken: string, uid: string): Promise<BindRoleResponse> {
-    const response = await this.fetchImpl(`${TAYGEDO_BASE_URL}/apihub/api/getGameBindRole?uid=${encodeURIComponent(uid)}&gameId=1256`, {
+  async getBindRole(accessToken: string, uid: string, gameId = '1256'): Promise<BindRoleResponse> {
+    const response = await this.fetchImpl(`${TAYGEDO_BASE_URL}/apihub/api/getGameBindRole?uid=${encodeURIComponent(uid)}&gameId=${encodeURIComponent(gameId)}`, {
       method: 'GET',
       headers: {
         Authorization: accessToken,
@@ -219,6 +223,41 @@ export class TaygedoApi {
     }
 
     return data.data
+  }
+
+  async getGameRoles(accessToken: string, uid: string, deviceId: string, gameId = '1256'): Promise<GameRolesResponse> {
+    const response = await this.fetchImpl(`${TAYGEDO_BASE_URL}/usercenter/api/v2/getGameRoles?gameId=${encodeURIComponent(gameId)}`, {
+      method: 'GET',
+      headers: {
+        platform: 'android',
+        authorization: accessToken,
+        uid,
+        deviceid: deviceId,
+        appversion: '1.1.0',
+        'User-Agent': 'okhttp/4.12.0',
+      },
+    })
+
+    const data = await response.json() as {
+      code?: number
+      msg?: string
+      data?: {
+        roles?: Array<{ roleId?: string | number, roleName?: string }>
+      }
+    }
+
+    if (!response.ok || data.code !== 0 || !Array.isArray(data.data?.roles)) {
+      throw new Error(data.msg ?? 'getGameRoles request failed')
+    }
+
+    return {
+      roles: data.data.roles
+        .filter(role => role.roleId !== undefined)
+        .map(role => ({
+          roleId: String(role.roleId),
+          roleName: role.roleName,
+        })),
+    }
   }
 
   async appSignin(accessToken: string, uid: string, deviceId: string): Promise<{ exp: number, goldCoin: number }> {
@@ -256,8 +295,8 @@ export class TaygedoApi {
     }
   }
 
-  async getSigninState(accessToken: string): Promise<{ days: number }> {
-    const response = await this.fetchImpl(`${TAYGEDO_BASE_URL}/apihub/awapi/signin/state?gameId=1256`, {
+  async getSigninState(accessToken: string, gameId = '1256'): Promise<{ days: number }> {
+    const response = await this.fetchImpl(`${TAYGEDO_BASE_URL}/apihub/awapi/signin/state?gameId=${encodeURIComponent(gameId)}`, {
       method: 'GET',
       headers: {
         Authorization: accessToken,
@@ -279,8 +318,8 @@ export class TaygedoApi {
     }
   }
 
-  async getSigninRewards(accessToken: string): Promise<Array<{ name: string, num: number }>> {
-    const response = await this.fetchImpl(`${TAYGEDO_BASE_URL}/apihub/awapi/sign/rewards?gameId=1256`, {
+  async getSigninRewards(accessToken: string, gameId = '1256'): Promise<Array<{ name: string, num: number }>> {
+    const response = await this.fetchImpl(`${TAYGEDO_BASE_URL}/apihub/awapi/sign/rewards?gameId=${encodeURIComponent(gameId)}`, {
       method: 'GET',
       headers: {
         Authorization: accessToken,
@@ -300,14 +339,14 @@ export class TaygedoApi {
     return data.data
   }
 
-  async gameSignin(accessToken: string, roleId: string): Promise<void> {
+  async gameSignin(accessToken: string, roleId: string, gameId = '1256'): Promise<void> {
     const response = await this.fetchImpl(`${TAYGEDO_BASE_URL}/apihub/awapi/sign`, {
       method: 'POST',
       headers: {
         authorization: accessToken,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: `roleId=${encodeURIComponent(roleId)}&gameId=1256`,
+      body: `roleId=${encodeURIComponent(roleId)}&gameId=${encodeURIComponent(gameId)}`,
     })
 
     const data = await response.json() as {
