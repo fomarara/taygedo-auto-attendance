@@ -15,10 +15,58 @@
 
 ## 快速开始
 
-<details>
-<summary>GitHub Actions 部署</summary>
+选择一种部署方式，展开对应步骤即可。不同部署方式使用同一套账号 JSON 格式，登录密码只从 Secret、环境变量或请求体读取，不写入账号配置。
 
-适合第一次使用 GitHub 的用户。Fork 后配置几个 Secret，就可以每天自动签到。
+### Cloudflare Workers 部署
+
+适合希望长期托管在 Serverless 平台的用户。使用 KV 保存账号和运行状态，支持定时任务和 HTTP 手动触发。
+
+<details>
+<summary>展开查看详细步骤</summary>
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/zzstar101/taygedo-auto-attendance)
+
+部署后配置环境变量：
+
+```text
+TAYGEDO_ADMIN_TOKEN=手动触发和登录接口使用的随机字符串
+TAYGEDO_PASSWORDS={"main":"你的塔吉多密码"}
+```
+
+可选：
+
+```text
+TAYGEDO_ACCOUNTS=[账号 JSON]
+TAYGEDO_NOTIFICATION_URLS=webhook 地址
+TAYGEDO_SERVERCHAN_SENDKEY=Server 酱 SendKey
+```
+
+Worker 使用绑定名为 `KV` 的 Cloudflare KV。可以从 `TAYGEDO_ACCOUNTS` 初始化，也可以通过登录接口生成账号配置。
+
+通过密码登录并写入 KV：
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <TAYGEDO_ADMIN_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"password","phone":"13800138000","password":"你的塔吉多密码","accountId":"main","accountName":"主账号"}' \
+  https://你的-worker.workers.dev/login
+```
+
+手动触发签到：
+
+```bash
+curl -H "Authorization: Bearer <TAYGEDO_ADMIN_TOKEN>" https://你的-worker.workers.dev/run
+```
+
+</details>
+
+### GitHub Actions 部署
+
+适合第一次使用 GitHub 的用户。Fork 后配置 Secrets，就可以每天自动签到。
+
+<details>
+<summary>展开查看详细步骤</summary>
 
 #### 1. Fork 仓库
 
@@ -90,48 +138,12 @@ account_name=主账号
 
 </details>
 
-<details>
-<summary>Cloudflare Workers 部署</summary>
+### Docker 部署
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/zzstar101/taygedo-auto-attendance)
-
-部署后配置环境变量：
-
-```text
-TAYGEDO_ADMIN_TOKEN=手动触发和登录接口使用的随机字符串
-TAYGEDO_PASSWORDS={"main":"你的塔吉多密码"}
-```
-
-可选：
-
-```text
-TAYGEDO_ACCOUNTS=[账号 JSON]
-TAYGEDO_NOTIFICATION_URLS=webhook 地址
-TAYGEDO_SERVERCHAN_SENDKEY=Server 酱 SendKey
-```
-
-Worker 使用绑定名为 `KV` 的 Cloudflare KV。可以从 `TAYGEDO_ACCOUNTS` 初始化，也可以通过登录接口生成账号配置。
-
-通过密码登录并写入 KV：
-
-```bash
-curl -X POST \
-  -H "Authorization: Bearer <TAYGEDO_ADMIN_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"mode":"password","phone":"13800138000","password":"你的塔吉多密码","accountId":"main","accountName":"主账号"}' \
-  https://你的-worker.workers.dev/login
-```
-
-手动触发签到：
-
-```bash
-curl -H "Authorization: Bearer <TAYGEDO_ADMIN_TOKEN>" https://你的-worker.workers.dev/run
-```
-
-</details>
+适合已有服务器、NAS 或本地容器环境的用户。默认使用 GHCR 镜像，也可以本地构建。
 
 <details>
-<summary>Docker 部署</summary>
+<summary>展开查看详细步骤</summary>
 
 Docker Compose 默认使用 GHCR 镜像：
 
@@ -178,8 +190,12 @@ docker compose run --rm taygedo-attendance
 
 </details>
 
+### 本地 CLI
+
+适合开发调试或在自己的定时任务里调用。账号文件和状态文件都保存在本地目录。
+
 <details>
-<summary>本地 CLI</summary>
+<summary>展开查看详细步骤</summary>
 
 安装依赖：
 
