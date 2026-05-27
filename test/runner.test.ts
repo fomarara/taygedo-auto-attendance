@@ -795,6 +795,46 @@ describe('runAttendance', () => {
     expect(result.summary).toContain('金币任务：签到✓ 浏览1/1 点赞1/1 分享✓ 今日金币110/150')
   })
 
+  it('keeps the api method this binding while handling already-done bbs signin', async () => {
+    class BoundBbsApi {
+      readonly refreshToken = vi.fn().mockResolvedValue({ accessToken: 'access-main', refreshToken: 'new-main' })
+      readonly getGameRoles = vi.fn().mockResolvedValue({ roles: [] })
+      readonly appSignin = vi.fn().mockResolvedValue({ exp: 10, goldCoin: 20 })
+      readonly getSigninState = vi.fn()
+      readonly getSigninRewards = vi.fn()
+      readonly gameSignin = vi.fn()
+      readonly getUserTasks = vi.fn().mockResolvedValue([
+        { code: 'signin_c', completeTimes: 0, limitTimes: 1 },
+      ])
+
+      bbsSignin(): Promise<void> {
+        if (!(this instanceof BoundBbsApi)) {
+          throw new Error('lost this binding')
+        }
+        throw new Error('您今天已经签到过了')
+      }
+
+      readonly getRecommendPostList = vi.fn().mockResolvedValue([])
+      readonly getPostFull = vi.fn()
+      readonly likePost = vi.fn()
+      readonly sharePost = vi.fn()
+      readonly getUserCoinTaskState = vi.fn().mockResolvedValue({})
+    }
+
+    const result = await runAttendance({
+      accountsSecret: JSON.stringify([
+        { id: 'main', name: '主账号', uid: '1', deviceId: 'device-1', refreshToken: 'old-main' },
+      ]),
+      api: new BoundBbsApi(),
+      maxRetries: 1,
+      coinTasks: true,
+      delay: () => Promise.resolve(),
+    })
+
+    expect(result.successCount).toBe(1)
+    expect(result.summary).toContain('金币任务：签到✓')
+  })
+
   it('does not call coin task APIs when coin tasks are disabled', async () => {
     const api = {
       refreshToken: vi.fn().mockResolvedValue({ accessToken: 'access-main', refreshToken: 'new-main' }),

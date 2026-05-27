@@ -440,6 +440,9 @@ async function runCoinTasks(
   ) {
     return undefined
   }
+  const coinTaskApi = api as AttendanceApi & {
+    bbsSignin: NonNullable<AttendanceApi['bbsSignin']>
+  }
 
   const delay = options.delay ?? sleep
   const sharePlatform = options.sharePlatform ?? 'qq'
@@ -456,7 +459,7 @@ async function runCoinTasks(
   }
 
   if (bbsTarget > 0) {
-    await signBbsIdempotently(api.bbsSignin, accessToken, account)
+    await signBbsIdempotently(coinTaskApi, accessToken, account)
     summary.bbsSignin = true
   }
 
@@ -504,12 +507,12 @@ async function runCoinTasks(
 }
 
 async function signBbsIdempotently(
-  bbsSignin: NonNullable<AttendanceApi['bbsSignin']>,
+  api: AttendanceApi & { bbsSignin: NonNullable<AttendanceApi['bbsSignin']> },
   accessToken: string,
   account: TaygedoAccount,
 ): Promise<void> {
   try {
-    await bbsSignin(accessToken, account.uid, account.deviceId)
+    await api.bbsSignin(accessToken, account.uid, account.deviceId)
   }
   catch (error) {
     if (!isAlreadySignedError(error)) {
