@@ -13,7 +13,7 @@ interface ActionOptions {
 export async function runAction(options: ActionOptions = {}): Promise<void> {
   const env = options.env ?? process.env
   const config = loadRuntimeConfig(env)
-  console.log(`运行配置：金币任务=${config.coinTasks ? '开启' : '关闭'}，分享平台=${config.sharePlatform}，强制重跑=${config.forceRun ? '是' : '否'}，账号并发=${config.accountConcurrency}`)
+  console.log(`运行配置：金币任务=${config.coinTasks ? '开启' : '关闭'}，云异环=${config.cloudDuration ? '开启' : '关闭'}，分享平台=${config.sharePlatform}，强制重跑=${config.forceRun ? '是' : '否'}，账号并发=${config.accountConcurrency}`)
   const service = new AttendanceService({
     accountStore: {
       readAccounts: async () => {
@@ -33,6 +33,7 @@ export async function runAction(options: ActionOptions = {}): Promise<void> {
     accountConcurrency: config.accountConcurrency,
     forceRun: config.forceRun,
     coinTasks: config.coinTasks,
+    cloudDuration: config.cloudDuration,
     sharePlatform: config.sharePlatform,
   })
   await service.run()

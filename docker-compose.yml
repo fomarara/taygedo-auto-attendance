@@ -2,7 +2,7 @@ services:
   taygedo-attendance:
     image: ghcr.io/zzstar101/taygedo-auto-attendance:latest
     container_name: taygedo-attendance
-    restart: ${TAYGEDO_DOCKER_RESTART:-"no"}
+    restart: ${TAYGEDO_DOCKER_RESTART:-no}
     environment:
       TAYGEDO_NOTIFICATION_URLS: ${TAYGEDO_NOTIFICATION_URLS:-}
       TAYGEDO_SERVERCHAN_SENDKEY: ${TAYGEDO_SERVERCHAN_SENDKEY:-}

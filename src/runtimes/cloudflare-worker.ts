@@ -309,6 +309,7 @@ async function runCloudflareAttendance(env: CloudflareEnv, forceRun?: boolean) {
     accountConcurrency: config.accountConcurrency,
     forceRun: forceRun ?? config.forceRun,
     coinTasks: config.coinTasks,
+    cloudDuration: config.cloudDuration,
     sharePlatform: config.sharePlatform,
   })
   return await service.run()

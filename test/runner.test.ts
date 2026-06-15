@@ -566,6 +566,154 @@ describe('runAttendance', () => {
     expect(result.summary).toContain('游戏 1289 / 异环A：签到成功，本月第 4 天，奖励 扩容核心 x2')
   })
 
+  it('claims cloud yihuan duration when laohu credentials are stored', async () => {
+    const api = {
+      refreshToken: vi.fn(),
+      getGameRoles: vi.fn().mockResolvedValue({ roles: [] }),
+      appSignin: vi.fn().mockResolvedValue({ exp: 10, goldCoin: 20 }),
+      getSigninState: vi.fn(),
+      getSigninRewards: vi.fn(),
+      gameSignin: vi.fn(),
+      cloudGetUserInfo: vi.fn().mockResolvedValue({ gave: 15, remained: 120 }),
+    }
+
+    const result = await runAttendance({
+      accountsSecret: JSON.stringify([
+        {
+          id: 'main',
+          name: '主账号',
+          uid: '1',
+          deviceId: 'device-1',
+          accessToken: 'stored-access',
+          refreshToken: 'old-main',
+          laohuToken: 'laohu-token',
+          laohuUserId: 'laohu-user',
+        },
+      ]),
+      api,
+      maxRetries: 1,
+    })
+
+    expect(api.cloudGetUserInfo).toHaveBeenCalledWith('laohu-token', 'laohu-user', 'device-1')
+    expect(result.accounts[0]?.cloudDuration).toEqual({
+      status: 'success',
+      gave: 15,
+      remained: 120,
+    })
+    expect(result.summary).toContain('云异环时长：+15 分钟，剩余 120 分钟')
+  })
+
+  it('skips cloud yihuan duration without stored laohu credentials', async () => {
+    const api = {
+      refreshToken: vi.fn().mockResolvedValue({ accessToken: 'access-main', refreshToken: 'new-main' }),
+      getGameRoles: vi.fn().mockResolvedValue({ roles: [] }),
+      appSignin: vi.fn().mockResolvedValue({ exp: 10, goldCoin: 20 }),
+      getSigninState: vi.fn(),
+      getSigninRewards: vi.fn(),
+      gameSignin: vi.fn(),
+      cloudGetUserInfo: vi.fn(),
+    }
+
+    const result = await runAttendance({
+      accountsSecret: JSON.stringify([
+        {
+          id: 'main',
+          name: '主账号',
+          uid: '1',
+          deviceId: 'device-1',
+          refreshToken: 'old-main',
+        },
+      ]),
+      api,
+      maxRetries: 1,
+    })
+
+    expect(api.cloudGetUserInfo).not.toHaveBeenCalled()
+    expect(result.accounts[0]?.cloudDuration).toEqual({
+      status: 'skipped',
+      skippedReason: '账号缺少 laohuToken/laohuUserId',
+    })
+    expect(result.summary).toContain('云异环时长：跳过')
+  })
+
+  it('logs in with a password to claim cloud yihuan duration when laohu credentials are missing', async () => {
+    const secretWriter = vi.fn()
+    const api = {
+      refreshToken: vi.fn(),
+      loginWithPassword: vi.fn().mockResolvedValue({ token: 'new-laohu-token', userId: 'new-laohu-user' }),
+      getGameRoles: vi.fn().mockResolvedValue({ roles: [] }),
+      appSignin: vi.fn().mockResolvedValue({ exp: 10, goldCoin: 20 }),
+      getSigninState: vi.fn(),
+      getSigninRewards: vi.fn(),
+      gameSignin: vi.fn(),
+      cloudGetUserInfo: vi.fn().mockResolvedValue({ gave: 15, remained: 120 }),
+    }
+
+    const result = await runAttendance({
+      accountsSecret: JSON.stringify([
+        {
+          id: 'main',
+          name: '主账号',
+          uid: '1',
+          deviceId: 'device-1',
+          accessToken: 'stored-access',
+          refreshToken: 'old-main',
+          phone: '13800138000',
+        },
+      ]),
+      api,
+      accountPasswords: {
+        main: 'secret-password',
+      },
+      maxRetries: 1,
+      secretWriter,
+    })
+
+    expect(api.loginWithPassword).toHaveBeenCalledWith('13800138000', 'secret-password', 'device-1')
+    expect(api.cloudGetUserInfo).toHaveBeenCalledWith('new-laohu-token', 'new-laohu-user', 'device-1')
+    expect(result.updatedAccounts[0]).toEqual(expect.objectContaining({
+      laohuToken: 'new-laohu-token',
+      laohuUserId: 'new-laohu-user',
+      tokenUpdatedAt: expect.any(String),
+    }))
+    expect(secretWriter).toHaveBeenCalledWith(JSON.stringify(result.updatedAccounts, null, 2))
+    expect(result.summary).toContain('云异环时长：+15 分钟，剩余 120 分钟')
+  })
+
+  it('can disable cloud yihuan duration', async () => {
+    const api = {
+      refreshToken: vi.fn(),
+      getGameRoles: vi.fn().mockResolvedValue({ roles: [] }),
+      appSignin: vi.fn().mockResolvedValue({ exp: 10, goldCoin: 20 }),
+      getSigninState: vi.fn(),
+      getSigninRewards: vi.fn(),
+      gameSignin: vi.fn(),
+      cloudGetUserInfo: vi.fn(),
+    }
+
+    const result = await runAttendance({
+      accountsSecret: JSON.stringify([
+        {
+          id: 'main',
+          name: '主账号',
+          uid: '1',
+          deviceId: 'device-1',
+          accessToken: 'stored-access',
+          refreshToken: 'old-main',
+          laohuToken: 'laohu-token',
+          laohuUserId: 'laohu-user',
+        },
+      ]),
+      api,
+      cloudDuration: false,
+      maxRetries: 1,
+    })
+
+    expect(api.cloudGetUserInfo).not.toHaveBeenCalled()
+    expect(result.accounts[0]?.cloudDuration).toBeUndefined()
+    expect(result.summary).not.toContain('云异环时长')
+  })
+
   it('builds a readable Chinese summary with account rewards and game rewards', async () => {
     const api = {
       refreshToken: vi.fn().mockResolvedValue({ accessToken: 'access-main', refreshToken: 'new-main' }),

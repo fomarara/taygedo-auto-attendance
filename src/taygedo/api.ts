@@ -3,6 +3,12 @@ import { buildH5Request, buildNativeRequest, TAYGEDO_BASE_URL } from './protocol
 
 const LAOHU_BASE_URL = 'https://user.laohu.com'
 const LAOHU_SECRET = '89155cc4e8634ec5b1b6364013b23e3e'
+const CLOUD_APP_ID = '10597'
+const CLOUD_APP_KEY = 'f1b7f11fc3774f898e387368cce4da04'
+const CLOUD_CHANNEL_ID = '9'
+const CLOUD_BID = 'com.pwrd.cloud.yh.laohu'
+const CLOUD_SDK_VERSION = '1.34.0'
+const CLOUD_APP_VERSION = '1.1.0'
 
 export interface RefreshTokenResponse {
   accessToken: string
@@ -60,6 +66,11 @@ export interface CoinState {
   todayCoin?: number
   limitCoin?: number
   [key: string]: unknown
+}
+
+export interface CloudDurationResponse {
+  gave: number
+  remained?: number
 }
 
 export class TaygedoApi {
@@ -604,7 +615,7 @@ export class TaygedoApi {
       msg?: string
       data?: unknown
     }
-    const post = isRecord(data.data) ? toRecommendPost(data.data) : undefined
+    const post = isRecord(data.data) ? toPostFull(data.data, postId) : undefined
 
     if (!response.ok || data.code !== 0 || !post) {
       throw apiResponseError('getPostFull', response, data, '获取帖子详情请求失败')
@@ -668,6 +679,58 @@ export class TaygedoApi {
     }
     return data.data
   }
+
+  async cloudGetUserInfo(laohuToken: string, laohuUserId: string, deviceId: string): Promise<CloudDurationResponse> {
+    const body = signedCloudBody({
+      appId: CLOUD_APP_ID,
+      deviceId,
+      deviceType: 'Pixel 8',
+      deviceName: 'Pixel 8',
+      t: String(Math.floor(Date.now() / 1000)),
+      channelId: CLOUD_CHANNEL_ID,
+      deviceModel: 'Pixel 8',
+      deviceSys: '14',
+      version: CLOUD_APP_VERSION,
+      sdkVersion: CLOUD_SDK_VERSION,
+      network: 'wifi',
+      bid: CLOUD_BID,
+      provider: '0',
+      idfa: '',
+      userId: laohuUserId,
+      token: laohuToken,
+    })
+
+    const response = await this.fetchImpl(`${LAOHU_BASE_URL}/cloud/game/getUserInfo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'okhttp/3.12.1',
+        Host: 'user.laohu.com',
+      },
+      body,
+    })
+
+    const data = await readJson(response, 'cloudGetUserInfo') as {
+      code?: number
+      message?: string
+      msg?: string
+      result?: {
+        perDayFirstLoginGiveDuration?: unknown
+        remainedDuration?: unknown
+      }
+    }
+
+    if (!response.ok || data.code !== 0 || !isRecord(data.result)) {
+      throw apiResponseError('cloudGetUserInfo', response, data, '云异环时长请求失败')
+    }
+
+    const gave = toOptionalNumber(data.result.perDayFirstLoginGiveDuration) ?? 0
+    const remained = toOptionalNumber(data.result.remainedDuration)
+    return {
+      gave,
+      ...(remained === undefined ? {} : { remained }),
+    }
+  }
 }
 
 function signedLaohuBody(data: Record<string, string>): string {
@@ -681,6 +744,19 @@ function signedLaohuBody(data: Record<string, string>): string {
 function laohuSign(data: Record<string, string>): string {
   const values = Object.keys(data).sort().map(key => data[key]).join('')
   return createHash('md5').update(`${values}${LAOHU_SECRET}`, 'utf8').digest('hex')
+}
+
+function signedCloudBody(data: Record<string, string>): string {
+  const withSign = {
+    ...data,
+    sign: cloudSign(data),
+  }
+  return formEncode(withSign)
+}
+
+function cloudSign(data: Record<string, string>): string {
+  const values = Object.keys(data).sort().map(key => data[key]).join('')
+  return createHash('md5').update(`${values}${CLOUD_APP_KEY}`, 'utf8').digest('hex')
 }
 
 function aesBase64Encode(value: string): string {
@@ -743,6 +819,17 @@ function toNumber(value: unknown): number {
   return 0
 }
 
+function toOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
 function toRecommendPost(value: Record<string, unknown>): RecommendPost | undefined {
   const postId = value.postId ?? value.id
   if (postId === undefined) {
@@ -759,6 +846,23 @@ function toRecommendPost(value: Record<string, unknown>): RecommendPost | undefi
         }
       : {}),
   }
+}
+
+function toPostFull(value: Record<string, unknown>, fallbackPostId: string): RecommendPost | undefined {
+  const directPost = toRecommendPost(value)
+  if (directPost) {
+    return directPost
+  }
+
+  if (!isRecord(value.post)) {
+    return undefined
+  }
+
+  return toRecommendPost({
+    postId: fallbackPostId,
+    selfOperation: value.selfOperation,
+    ...value.post,
+  })
 }
 
 function toGameRecordCard(value: Record<string, unknown>): GameRecordCardResponse['cards'][number] | undefined {

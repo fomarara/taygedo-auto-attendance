@@ -12,7 +12,7 @@
 - 支持腾讯云 SCF / 阿里云 FC 定时云函数，使用 Upstash Redis REST 持久化账号和状态
 - 支持 Docker / Docker Compose 和本地 CLI
 - 支持短信验证码登录、账号密码登录
-- 支持 APP 签到、游戏签到和塔吉多金币任务
+- 支持 APP 签到、游戏签到、塔吉多金币任务和云异环每日时长
 - 支持普通 webhook 和 Server 酱通知
 
 ## 快速开始
@@ -169,6 +169,7 @@ index.main_handler
 | `TAYGEDO_MAX_RETRIES` | 单账号最大重试次数，默认 `3` |
 | `TAYGEDO_ACCOUNT_CONCURRENCY` | 多账号并发数，默认 `1`，可设为 `2` 压缩多号耗时 |
 | `TAYGEDO_COIN_TASKS` | 是否执行金币任务，默认 `true` |
+| `TAYGEDO_CLOUD_DURATION` | 是否领取云异环每日时长，默认 `true` |
 | `TAYGEDO_SHARE_PLATFORM` | 分享平台，默认 `qq` |
 
 云函数版会强制使用 Upstash，不需要配置 `TAYGEDO_ACCOUNT_STORE` 和 `TAYGEDO_STATE_STORE`。
@@ -248,6 +249,7 @@ Settings -> Secrets and variables -> Actions -> New repository secret
 | `TAYGEDO_SERVERCHAN_SENDKEY` | Server 酱 SendKey | 可选 |
 | `TAYGEDO_MAX_RETRIES` | 单账号最大重试次数，默认 `3` | 可选 |
 | `TAYGEDO_ACCOUNT_CONCURRENCY` | 多账号并发数，默认 `1` | 可选 |
+| `TAYGEDO_CLOUD_DURATION` | 是否领取云异环每日时长，默认 `true` | 可选 |
 
 #### 5. 添加账号
 
@@ -349,6 +351,112 @@ docker compose run --rm taygedo-attendance
 ```
 
 镜像 workflow 会推送 `linux/amd64` 和 `linux/arm64`。
+
+</details>
+
+### 青龙面板部署
+
+适合已经使用青龙面板管理定时任务的用户。青龙脚本复用本地 CLI，账号文件、加密密钥和每日去重状态默认保存在 `/ql/data/taygedo-auto-attendance`。
+
+<details>
+<summary>展开查看详细步骤</summary>
+
+#### 1. 拉取仓库
+
+在青龙面板的订阅管理中添加仓库，或进入青龙容器后手动拉取：
+
+```bash
+cd /ql/data/scripts
+git clone https://github.com/zzstar101/taygedo-auto-attendance.git
+cd taygedo-auto-attendance
+```
+
+`scripts/qinglong.sh` 顶部带有青龙可识别的任务名和定时注释：
+
+```bash
+# new Env('塔吉多自动签到')
+# cron: 15 1 * * *
+```
+
+拉库后青龙可以自动识别任务名和默认定时。青龙需要 Node.js 18 或更高版本。首次执行 `scripts/qinglong.sh` 时会自动安装项目依赖；如果青龙没有 `pnpm`，脚本会依次尝试 `corepack pnpm` 和 `npm install`。
+
+#### 2. 首次登录生成账号文件
+
+在青龙环境变量中添加：
+
+```text
+TAYGEDO_LOGIN_MODE=password
+TAYGEDO_LOGIN_PHONE=你的手机号
+TAYGEDO_LOGIN_PASSWORD=你的塔吉多密码
+TAYGEDO_LOGIN_ACCOUNT_ID=main
+TAYGEDO_LOGIN_ACCOUNT_NAME=主账号
+```
+
+然后在青龙任务中手动运行一次：
+
+```bash
+cd /ql/data/scripts/taygedo-auto-attendance && bash scripts/qinglong.sh login
+```
+
+脚本会生成：
+
+```text
+/ql/data/taygedo-auto-attendance/accounts.json
+/ql/data/taygedo-auto-attendance/credential-key
+```
+
+如果你已经有账号 JSON，也可以直接把它放进青龙环境变量 `TAYGEDO_ACCOUNTS`。脚本首次运行时会写入 `/ql/data/taygedo-auto-attendance/accounts.json`；如需强制覆盖已有账号文件，设置：
+
+```text
+TAYGEDO_ACCOUNTS_OVERWRITE=true
+```
+
+#### 3. 添加定时签到任务
+
+青龙定时任务命令：
+
+```bash
+cd /ql/data/scripts/taygedo-auto-attendance && bash scripts/qinglong.sh
+```
+
+建议定时规则设置为每天北京时间凌晨后执行一次，例如：
+
+```text
+15 1 * * *
+```
+
+强制忽略今日去重并重跑：
+
+```bash
+cd /ql/data/scripts/taygedo-auto-attendance && TAYGEDO_FORCE_RUN=true bash scripts/qinglong.sh
+```
+
+脚本也支持把参数继续传给本地 CLI，例如只打印当前账号文件中的设备信息：
+
+```bash
+cd /ql/data/scripts/taygedo-auto-attendance && bash scripts/qinglong.sh device --print
+```
+
+#### 4. 可选配置
+
+```text
+TAYGEDO_SERVERCHAN_SENDKEY=SCTxxxxxxxxxxxxxxxxxxxxxxxx
+TAYGEDO_NOTIFICATION_URLS=https://example.com/webhook
+TAYGEDO_MAX_RETRIES=3
+TAYGEDO_ACCOUNT_CONCURRENCY=1
+TAYGEDO_COIN_TASKS=true
+TAYGEDO_CLOUD_DURATION=true
+TAYGEDO_SHARE_PLATFORM=qq
+```
+
+如果不想使用默认数据目录，可以指定：
+
+```text
+TAYGEDO_DATA_DIR=/ql/data/taygedo-auto-attendance
+TAYGEDO_ACCOUNTS_FILE=/ql/data/taygedo-auto-attendance/accounts.json
+TAYGEDO_STATE_DIR=/ql/data/taygedo-auto-attendance/state
+TAYGEDO_CREDENTIAL_KEY_PATH=/ql/data/taygedo-auto-attendance/credential-key
+```
 
 </details>
 
@@ -488,6 +596,16 @@ account_name=主账号
 | `TAYGEDO_SHARE_PLATFORM` | 分享平台，默认 `qq`，可填 `wechat`、`timeline`、`wb` |
 
 如果只追求签到速度，关闭金币任务最快；如果保留金币任务，多账号场景可把 `TAYGEDO_ACCOUNT_CONCURRENCY` 设为 `2` 先试运行。
+
+### 云异环时长
+
+每日签到默认会尝试调用云异环 `getUserInfo` 接口，触发每日首次登录赠送时长，并在通知摘要里显示本次赠送分钟和剩余分钟。此功能优先复用账号 JSON 中的 `laohuToken` / `laohuUserId`；缺少 token 但有手机号和可用密码时，会先密码登录拿老虎 token 并写回账号配置。
+
+| 配置 | 说明 |
+| --- | --- |
+| `TAYGEDO_CLOUD_DURATION` | 是否领取云异环每日时长，默认 `true`，设为 `false` 可关闭 |
+
+如果账号配置缺少 `laohuToken` / `laohuUserId`，且也没有可用于登录的密码，该账号的云异环任务会跳过，不影响 APP 签到、游戏签到和金币任务。
 
 ### 多账号
 
