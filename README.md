@@ -12,7 +12,7 @@
 - 支持腾讯云 SCF / 阿里云 FC 定时云函数，使用 Upstash Redis REST 持久化账号和状态
 - 支持 Docker / Docker Compose 和本地 CLI
 - 支持短信验证码登录、账号密码登录
-- 支持 APP 签到、游戏签到和塔吉多金币任务
+- 支持 APP 签到、游戏签到、塔吉多金币任务和云异环每日时长
 - 支持普通 webhook 和 Server 酱通知
 
 ## 快速开始
@@ -169,6 +169,7 @@ index.main_handler
 | `TAYGEDO_MAX_RETRIES` | 单账号最大重试次数，默认 `3` |
 | `TAYGEDO_ACCOUNT_CONCURRENCY` | 多账号并发数，默认 `1`，可设为 `2` 压缩多号耗时 |
 | `TAYGEDO_COIN_TASKS` | 是否执行金币任务，默认 `true` |
+| `TAYGEDO_CLOUD_DURATION` | 是否领取云异环每日时长，默认 `true` |
 | `TAYGEDO_SHARE_PLATFORM` | 分享平台，默认 `qq` |
 
 云函数版会强制使用 Upstash，不需要配置 `TAYGEDO_ACCOUNT_STORE` 和 `TAYGEDO_STATE_STORE`。
@@ -248,6 +249,7 @@ Settings -> Secrets and variables -> Actions -> New repository secret
 | `TAYGEDO_SERVERCHAN_SENDKEY` | Server 酱 SendKey | 可选 |
 | `TAYGEDO_MAX_RETRIES` | 单账号最大重试次数，默认 `3` | 可选 |
 | `TAYGEDO_ACCOUNT_CONCURRENCY` | 多账号并发数，默认 `1` | 可选 |
+| `TAYGEDO_CLOUD_DURATION` | 是否领取云异环每日时长，默认 `true` | 可选 |
 
 #### 5. 添加账号
 
@@ -369,7 +371,14 @@ git clone https://github.com/zzstar101/taygedo-auto-attendance.git
 cd taygedo-auto-attendance
 ```
 
-青龙需要 Node.js 18 或更高版本。首次执行 `scripts/qinglong.sh` 时会自动安装项目依赖；如果青龙没有 `pnpm`，脚本会依次尝试 `corepack pnpm` 和 `npm install`。
+`scripts/qinglong.sh` 顶部带有青龙可识别的任务名和定时注释：
+
+```bash
+# new Env('塔吉多自动签到')
+# cron: 15 1 * * *
+```
+
+拉库后青龙可以自动识别任务名和默认定时。青龙需要 Node.js 18 或更高版本。首次执行 `scripts/qinglong.sh` 时会自动安装项目依赖；如果青龙没有 `pnpm`，脚本会依次尝试 `corepack pnpm` 和 `npm install`。
 
 #### 2. 首次登录生成账号文件
 
@@ -422,6 +431,12 @@ cd /ql/data/scripts/taygedo-auto-attendance && bash scripts/qinglong.sh
 cd /ql/data/scripts/taygedo-auto-attendance && TAYGEDO_FORCE_RUN=true bash scripts/qinglong.sh
 ```
 
+脚本也支持把参数继续传给本地 CLI，例如只打印当前账号文件中的设备信息：
+
+```bash
+cd /ql/data/scripts/taygedo-auto-attendance && bash scripts/qinglong.sh device --print
+```
+
 #### 4. 可选配置
 
 ```text
@@ -430,6 +445,7 @@ TAYGEDO_NOTIFICATION_URLS=https://example.com/webhook
 TAYGEDO_MAX_RETRIES=3
 TAYGEDO_ACCOUNT_CONCURRENCY=1
 TAYGEDO_COIN_TASKS=true
+TAYGEDO_CLOUD_DURATION=true
 TAYGEDO_SHARE_PLATFORM=qq
 ```
 
@@ -580,6 +596,16 @@ account_name=主账号
 | `TAYGEDO_SHARE_PLATFORM` | 分享平台，默认 `qq`，可填 `wechat`、`timeline`、`wb` |
 
 如果只追求签到速度，关闭金币任务最快；如果保留金币任务，多账号场景可把 `TAYGEDO_ACCOUNT_CONCURRENCY` 设为 `2` 先试运行。
+
+### 云异环时长
+
+每日签到默认会尝试调用云异环 `getUserInfo` 接口，触发每日首次登录赠送时长，并在通知摘要里显示本次赠送分钟和剩余分钟。此功能优先复用账号 JSON 中的 `laohuToken` / `laohuUserId`；缺少 token 但有手机号和可用密码时，会先密码登录拿老虎 token 并写回账号配置。
+
+| 配置 | 说明 |
+| --- | --- |
+| `TAYGEDO_CLOUD_DURATION` | 是否领取云异环每日时长，默认 `true`，设为 `false` 可关闭 |
+
+如果账号配置缺少 `laohuToken` / `laohuUserId`，且也没有可用于登录的密码，该账号的云异环任务会跳过，不影响 APP 签到、游戏签到和金币任务。
 
 ### 多账号
 

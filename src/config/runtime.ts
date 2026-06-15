@@ -16,6 +16,7 @@ export interface RuntimeConfig {
   statePrefix: string
   forceRun: boolean
   coinTasks: boolean
+  cloudDuration: boolean
   sharePlatform: string
   loopSeconds?: number
   adminToken?: string
@@ -42,6 +43,7 @@ export function loadRuntimeConfig(env: Record<string, string | undefined>): Runt
     statePrefix: optionalEnv(env, 'TAYGEDO_STATE_PREFIX') ?? 'taygedo',
     forceRun: parseBoolean(optionalEnv(env, 'TAYGEDO_FORCE_RUN')),
     coinTasks: parseBoolean(optionalEnv(env, 'TAYGEDO_COIN_TASKS') ?? 'true'),
+    cloudDuration: parseBoolean(optionalEnv(env, 'TAYGEDO_CLOUD_DURATION') ?? 'true'),
     sharePlatform: optionalEnv(env, 'TAYGEDO_SHARE_PLATFORM') ?? 'qq',
     loopSeconds: parseOptionalPositiveInteger(optionalEnv(env, 'TAYGEDO_LOOP_SECONDS'), 'TAYGEDO_LOOP_SECONDS'),
     adminToken: optionalEnv(env, 'TAYGEDO_ADMIN_TOKEN'),

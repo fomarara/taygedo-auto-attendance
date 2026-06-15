@@ -372,4 +372,48 @@ describe('TaygedoApi', () => {
     expect(body).not.toContain('13800138000')
     expect(body).not.toContain('secret-password')
   })
+
+  it('claims cloud yihuan duration through the laohu cloud endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 0,
+        message: 'ok',
+        result: {
+          perDayFirstLoginGiveDuration: '15',
+          remainedDuration: '120',
+        },
+      }), { status: 200 }),
+    )
+    const api = new TaygedoApi({ fetch: fetchMock })
+
+    await expect(api.cloudGetUserInfo('laohu-token', 'user-1', 'device-1')).resolves.toEqual({
+      gave: 15,
+      remained: 120,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://user.laohu.com/cloud/game/getUserInfo',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'okhttp/3.12.1',
+          Host: 'user.laohu.com',
+        }),
+        body: expect.any(String),
+      }),
+    )
+
+    const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body))
+    expect(Object.fromEntries(body)).toEqual(expect.objectContaining({
+      appId: '10597',
+      channelId: '9',
+      bid: 'com.pwrd.cloud.yh.laohu',
+      sdkVersion: '1.34.0',
+      token: 'laohu-token',
+      userId: 'user-1',
+      deviceId: 'device-1',
+      sign: expect.any(String),
+    }))
+  })
 })

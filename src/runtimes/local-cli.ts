@@ -92,6 +92,7 @@ function createDefaultService(): LocalCliService {
         accountConcurrency: config.accountConcurrency,
         forceRun: options.forceRun ?? config.forceRun,
         coinTasks: config.coinTasks,
+        cloudDuration: config.cloudDuration,
         sharePlatform: config.sharePlatform,
       }).run()
     },

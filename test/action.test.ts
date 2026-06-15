@@ -130,7 +130,7 @@ describe('runAction', () => {
         api,
       })
 
-      expect(log).toHaveBeenCalledWith(expect.stringContaining('运行配置：金币任务=关闭，分享平台=wb'))
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('运行配置：金币任务=关闭，云异环=开启，分享平台=wb'))
     }
     finally {
       log.mockRestore()

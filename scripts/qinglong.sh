@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# new Env('塔吉多自动签到')
+# cron: 15 1 * * *
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -88,11 +90,31 @@ run_cli() {
   node_modules/.bin/tsx src/runtimes/local-cli.ts "$@"
 }
 
+require_accounts_file() {
+  if [[ "${TAYGEDO_ACCOUNT_STORE:-file}" != "file" ]]; then
+    return
+  fi
+
+  if [[ -s "$TAYGEDO_ACCOUNTS_FILE" ]]; then
+    return
+  fi
+
+  cat >&2 <<EOF
+缺少账号文件：$TAYGEDO_ACCOUNTS_FILE
+请先执行登录任务：
+  bash scripts/qinglong.sh login
+或在青龙环境变量中配置 TAYGEDO_ACCOUNTS，首次运行会自动写入账号文件。
+EOF
+  exit 1
+}
+
 run_attendance() {
   local extra_args=()
   if is_truthy "${TAYGEDO_FORCE_RUN:-}"; then
     extra_args+=(--force)
   fi
+
+  require_accounts_file
 
   run_cli attendance \
     --accounts-file "$TAYGEDO_ACCOUNTS_FILE" \
@@ -142,6 +164,8 @@ run_login() {
 }
 
 run_device() {
+  require_accounts_file
+
   run_cli device --accounts-file "$TAYGEDO_ACCOUNTS_FILE" "$@"
 }
 
